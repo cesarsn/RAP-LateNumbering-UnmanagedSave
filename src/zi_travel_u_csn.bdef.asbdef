@@ -1,0 +1,70 @@
+managed implementation in class zbp_i_travel_u_csn unique;
+strict ( 2 );
+with draft;
+
+define behavior for ZI_Travel_U_CSN alias Travel
+with unmanaged save
+draft table ZITRVL_UCSND
+lock master
+total etag LastChangedAt
+authorization master ( instance )
+etag master LocalLastChangeDateTime
+late numbering
+{
+  create ( authorization : global );
+  update;
+  internal delete;
+  field ( readonly ) TravelID;
+  association _Booking { create {default function GetDefaultsForBookings;} with draft;  }
+
+  draft action Edit;
+  draft action Activate optimized;
+  draft action Discard;
+  draft action Resume;
+  draft determine action Prepare;
+
+  mapping for /dmo/s_travel_in control /dmo/s_travel_intx
+    {
+      AgencyID      = agency_id;
+      BeginDate     = begin_date;
+      BookingFee    = booking_fee;
+      CurrencyCode  = currency_code;
+      CustomerID    = customer_id;
+      EndDate       = end_date;
+      Memo          = description;
+      Status        = status;
+      TotalPrice    = total_price;
+      TravelID      = travel_id;
+    }
+
+}
+
+define behavior for ZI_Booking_U_CSN alias Booking
+with unmanaged save
+draft table ZIBKNG_UCSND
+lock dependent by _Travel
+authorization dependent by _Travel
+etag dependent by _Travel
+late numbering
+{
+  update;
+  delete;
+  field ( readonly ) TravelID;
+  field (readonly:update) BookingID;
+
+  association _Travel {with draft;}
+
+  mapping for /DMO/S_BOOKING_IN control /dmo/s_booking_intx
+    {
+      AirlineID    = carrier_id;
+      BookingDate  = booking_date;
+      BookingID    = booking_id;
+      ConnectionID = connection_id;
+      CurrencyCode = currency_code;
+      CustomerID   = customer_id;
+      FlightDate   = flight_date;
+      FlightPrice  = flight_price;
+      TravelID     = travel_id;
+    }
+
+}

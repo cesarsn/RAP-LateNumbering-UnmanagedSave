@@ -1,0 +1,5 @@
+@EndUserText.label: 'Travel Unmanaged Save'
+define service ZUI_TRAVEL_U_CSN {
+  expose ZC_Travel_U_CSN  as Travel;
+  expose ZC_Booking_U_CSN as Booking;
+}
