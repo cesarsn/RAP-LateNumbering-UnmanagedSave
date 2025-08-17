@@ -13,7 +13,7 @@ late numbering
 {
   create ( authorization : global );
   update;
-  internal delete;
+  delete;
   field ( readonly ) TravelID;
   association _Booking { create {default function GetDefaultsForBookings;} with draft;  }
 
@@ -23,7 +23,8 @@ late numbering
   draft action Resume;
   draft determine action Prepare;
 
-  mapping for /dmo/s_travel_in control /dmo/s_travel_intx
+  mapping for /dmo/s_travel_in
+  control /dmo/s_travel_intx corresponding
     {
       AgencyID      = agency_id;
       BeginDate     = begin_date;

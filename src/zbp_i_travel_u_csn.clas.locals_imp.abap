@@ -69,6 +69,7 @@ CLASS lsc_ZI_TRAVEL_U_CSN DEFINITION INHERITING FROM cl_abap_behavior_saver_fail
   PROTECTED SECTION.
     types: BEGIN OF ts_key,
              travelid   type /dmo/travel_id,
+             delete_entity type abap_boolean,
            END OF ts_key,
            tt_keys type STANDARD TABLE OF ts_key WITH DEFAULT KEY.
 
@@ -82,7 +83,42 @@ CLASS lsc_ZI_TRAVEL_U_CSN DEFINITION INHERITING FROM cl_abap_behavior_saver_fail
            ts_read_result_booking TYPE TABLE FOR READ RESULT zi_booking_u_csn,
            ts_failed type response for failed late zi_travel_u_csn,
            ts_reported type response for reported late zi_travel_u_csn ,
-           ts_mapped type response for mapped late zi_travel_u_csn.
+           ts_mapped type response for mapped late zi_travel_u_csn,
+           ts_request_change type request for change zi_travel_u_csn,
+           ts_request_delete type request for delete zi_travel_u_csn.
+
+    METHODS _process_key
+      IMPORTING
+        is_key   TYPE lsc_zi_travel_u_csn=>ts_key
+        create          TYPE ts_request_change
+        update          TYPE ts_request_change
+        delete          type ts_request_delete
+      CHANGING
+        failed   TYPE ts_failed
+        reported TYPE ts_reported.
+
+    METHODS _delete_travel
+      IMPORTING
+        is_key   TYPE lsc_zi_travel_u_csn=>ts_key
+      EXPORTING
+        et_messages type /dmo/t_message.
+
+    METHODS _update_travel
+      IMPORTING
+        is_key   TYPE lsc_zi_travel_u_csn=>ts_key
+        create          TYPE ts_request_change
+        update          TYPE ts_request_change
+        delete          type ts_request_delete
+      EXPORTING
+        et_messages type /dmo/t_message.
+
+    METHODS _get_processed_root_keys
+      IMPORTING
+        create          TYPE ts_request_change
+        update          TYPE ts_request_change
+        delete          type ts_request_delete
+      RETURNING
+        value(r_result) TYPE lsc_zi_travel_u_csn=>tt_keys.
 
     METHODS _create_travel
       IMPORTING
@@ -105,7 +141,7 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
     "create travel
 
     "Two create options:
-     "1.- Create a new travel with bookings
+     "1.- Create a new travel (with bookings)
      "2.- Crate a new booking for a existing travel
 
     data: lt_travel_key type table for READ IMPORT ZI_Travel_U_CSN\\Travel.
@@ -116,7 +152,7 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
 
     "Notice that the read operation is done with %PID, TRAVELID (this last can be ommited as is initial for new travels)
     loop at mapped-travel INTO data(ls_mapped_travel).
-        insert value #( %pid = ls_mapped_travel-%pid travelid = ls_mapped_travel-TravelID ) into table lt_travel_key.
+        insert value #( %pid = ls_mapped_travel-%pid travelid = ls_mapped_travel-%tmp-TravelID ) into table lt_travel_key.
     ENDLOOP.
     "Notice that the read operation is done with %PID, TRAVELID, BOOKINGID
     loop at mapped-booking INTO data(ls_mapped_booking).
@@ -166,6 +202,26 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
 
   METHOD save_modified.
     "Update processing logic to save modified data
+    "Process only updated travels. Created travels are processed in adjust_numbers method
+
+    data: lt_processed_keys type tt_keys.
+
+
+    lt_processed_keys = _get_processed_root_keys( create = create
+                                                  update = update
+                                                  delete = delete ).
+
+    loop at lt_processed_keys INTO DATA(ls_key).
+        _process_key( exporting is_key = ls_key
+                                 create = create
+                                 update = update
+                                 delete = delete
+                       CHANGING  failed   = failed
+                                 reported = reported ).
+    ENDLOOP.
+
+
+
 
   ENDMETHOD.
 
@@ -222,7 +278,7 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
     call FUNCTION '/DMO/FLIGHT_TRAVEL_SAVE'.
 
     "Map ids in mapping table
-    "Travekl
+    "Travel
     READ TABLE mapped-travel ASSIGNING FIELD-SYMBOL(<fs_mapped_travel>)
       WITH KEY id components %pid = is_travel-%pid.
     <fs_mapped_travel>-TravelID = ls_travel_out-travel_id.
@@ -238,6 +294,124 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
 
     endloop.
 
+  ENDMETHOD.
+
+
+  METHOD _get_processed_root_keys.
+
+    loop at create-booking INTO DATA(ls_booking).
+        insert value #( travelid = ls_booking-TravelID ) into table r_result.
+    ENDLOOP.
+
+    loop at update-booking INTO ls_booking.
+        insert value #( travelid = ls_booking-TravelID ) into table r_result.
+    ENDLOOP.
+
+    loop at update-travel INTO DATA(ls_travel).
+        insert value #( travelid = ls_travel-TravelID ) into table r_result.
+    ENDLOOP.
+
+    loop at delete-travel INTO DATA(ls_delete_travel).
+        insert value #( travelid = ls_delete_travel-TravelID delete_entity = abap_true ) into table r_result.
+    ENDLOOP.
+
+    loop at delete-booking INTO DATA(ls_delete_booking).
+        insert value #( travelid = ls_delete_booking-TravelID ) into table r_result.
+    ENDLOOP.
+
+    "Discard created travels as they are processed in adjust_numbers method
+    loop at create-travel INTO ls_travel.
+        delete r_result where travelid = ls_travel-TravelID.
+    ENDLOOP.
+
+    sort r_result BY travelid delete_entity DESCENDING.
+    delete adjacent duplicates from r_result comparing travelid.
+
+
+  ENDMETHOD.
+
+
+  METHOD _update_travel.
+
+
+    data:  ls_travel TYPE /dmo/s_travel_in,
+           ls_travelx TYPE /dmo/s_travel_inx,
+           it_booking TYPE /dmo/t_booking_in,
+           it_bookingx TYPE /dmo/t_booking_inx.
+
+    "Updated value for travel?
+    try.
+        data(ls_update_travel) = update-travel[ key id TravelID = is_key-travelid ].
+
+        ls_travel = CORRESPONDING #( ls_update_travel MAPPING FROM ENTITY ).
+        "ls_travelx = CORRESPONDING #( ls_update_travel MAPPING FROM ENTITY USING CONTROL ).
+    CATCH cx_root.
+    ENDTRY.
+
+
+    call function '/DMO/FLIGHT_TRAVEL_UPDATE'
+      EXPORTING
+        is_travel              = ls_travel
+        is_travelx             = ls_travelx
+        it_booking             = it_booking
+        it_bookingx            = it_bookingx
+*        it_booking_supplement  =
+*        it_booking_supplementx =
+*
+       IMPORTING
+*        es_travel              =
+*        et_booking             =
+*        et_booking_supplement  =
+         et_messages            = et_messages
+      .
+
+  ENDMETHOD.
+
+
+  METHOD _delete_travel.
+
+    call FUNCTION '/DMO/FLIGHT_TRAVEL_DELETE'
+      EXPORTING
+        iv_travel_id = is_key-travelid
+       IMPORTING
+         et_messages = et_messages.
+
+  ENDMETHOD.
+
+
+  METHOD _process_key.
+
+    data: lt_messages type /dmo/t_message.
+
+    case is_key-delete_entity.
+
+        when abap_true.
+            _delete_travel( exporting is_key = is_key
+                            IMPORTING et_messages = lt_messages ).
+        when OTHERS.
+            _update_travel( exporting is_key = is_key
+                                      create = create
+                                      update = update
+                                      delete = delete
+                            IMPORTING et_messages = lt_messages ).
+    endcase.
+
+    delete lt_messages where msgty na 'EAX'.
+    if lt_messages[] is NOT INITIAL.
+        loop at lt_messages into data(ls_message).
+            insert value #( travelid = is_key-travelid
+                            %msg = new_message( id       = ls_message-msgid
+                                                severity = if_abap_behv_message=>severity-error
+                                                number   = ls_message-msgno
+                                                v1       = ls_message-msgv1
+                                                v2       = ls_message-msgv2
+                                                v3       = ls_message-msgv3
+                                                v4       = ls_message-msgv4 )
+                            ) into table reported-travel.
+        ENDLOOP.
+        insert value #( travelid = is_key-travelid ) into TABLE failed-travel.
+        return.
+    ENDIF.
   ENDMETHOD.
 
 ENDCLASS.
