@@ -177,11 +177,11 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
 
     "Read operation is done with %PID, %TMP-TRAVELID (this is initial for new travels)
     LOOP AT mapped-travel INTO DATA(ls_mapped_travel).
-      INSERT VALUE #( %pid = ls_mapped_travel-%pid travelid = ls_mapped_travel-%tmp-TravelID ) INTO TABLE lt_travel_key.
+      INSERT VALUE #( %pid = ls_mapped_travel-%pid %key = ls_mapped_travel-%tmp ) INTO TABLE lt_travel_key.
     ENDLOOP.
     "Read operation is done with %PID, %TMP-TRAVELID, %TMP-BOOKINGID
     LOOP AT mapped-booking INTO DATA(ls_mapped_booking).
-      INSERT VALUE #( %pid = ls_mapped_booking-%pid travelid = ls_mapped_booking-%tmp-TravelID bookingid = ls_mapped_booking-%tmp-BookingID ) INTO TABLE lt_booking_key.
+      INSERT VALUE #( %pid = ls_mapped_booking-%pid %key = ls_mapped_booking-%tmp ) INTO TABLE lt_booking_key.
     ENDLOOP.
 
     READ ENTITIES OF ZI_Travel_U_CSN IN LOCAL MODE
