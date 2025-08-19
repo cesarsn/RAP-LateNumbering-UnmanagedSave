@@ -24,7 +24,7 @@ late numbering
   draft determine action Prepare;
 
   mapping for /dmo/s_travel_in
-  control /dmo/s_travel_intx corresponding
+  control /dmo/s_travel_intx
     {
       AgencyID      = agency_id;
       BeginDate     = begin_date;
