@@ -23,9 +23,11 @@ CLASS lhc_Travel IMPLEMENTATION.
 
     "This method will default the id of the new booking by reading all the bookings of
     "the travel and incrementing the highest id by 1.
+    "Also, the booking date is set to the current system date.
     DATA: lt_read_keys TYPE TABLE FOR READ IMPORT ZI_Travel_U_CSN\\Travel\_Booking,
           ls_read_key  LIKE LINE OF lt_read_keys,
           ls_result    LIKE LINE OF result.
+    DATA: lv_new_booking_id TYPE /dmo/booking_id.
 
     LOOP AT keys INTO DATA(ls_key).
       ls_read_key-%tky = ls_key-%tky.   "%TKY includes %is_draft, %pid and TravelId
@@ -38,23 +40,20 @@ CLASS lhc_Travel IMPLEMENTATION.
            WITH lt_read_keys
            RESULT DATA(lt_bookings).
 
-    SORT lt_bookings BY %is_draft TravelId BookingId DESCENDING.
-    DELETE ADJACENT DUPLICATES FROM lt_bookings COMPARING %is_draft TravelId.
+    SORT lt_bookings BY %is_draft %pidparent TravelId BookingId DESCENDING.
+    DELETE ADJACENT DUPLICATES FROM lt_bookings COMPARING %is_draft %pidparent TravelId.
 
     LOOP AT keys INTO ls_key.
-      CLEAR: ls_result.
+      CLEAR: ls_result, lv_new_booking_id.
       TRY.
-          DATA(ls_booking) = lt_bookings[ KEY entity %is_draft = ls_key-%is_draft TravelId = ls_key-TravelID ].
+          DATA(ls_booking) = lt_bookings[ KEY entity %is_draft = ls_key-%is_draft %pidparent = ls_key-%pid TravelId = ls_key-TravelID ].
+          lv_new_booking_id = ls_booking-BookingID + 1.
         CATCH cx_root.
-          CLEAR: ls_booking.
-          ls_booking-travelid  = ls_key-TravelID.
-          ls_booking-%is_draft = ls_key-%is_draft.
+          lv_new_booking_id = 1.
       ENDTRY.
-      DATA(ls_new_booking) = ls_booking.
-      ls_new_booking-BookingId = ls_booking-BookingId + 1.
       ls_result-%tky = ls_key-%tky.
-      ls_result-%param-TravelID    = ls_new_booking-TravelID.
-      ls_result-%param-BookingID   = ls_new_booking-BookingId.
+      ls_result-%param-TravelID    = ls_key-TravelID.
+      ls_result-%param-BookingID   = lv_new_booking_id.
       ls_result-%param-BookingDate = cl_abap_context_info=>get_system_date( ).
       INSERT ls_result INTO TABLE result.
     ENDLOOP.
@@ -176,11 +175,11 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
     "Process only if there are changes
     CHECK mapped-travel IS NOT INITIAL OR mapped-booking IS NOT INITIAL.
 
-    "Notice that the read operation is done with %PID, TRAVELID (this last can be ommited as is initial for new travels)
+    "Read operation is done with %PID, %TMP-TRAVELID (this is initial for new travels)
     LOOP AT mapped-travel INTO DATA(ls_mapped_travel).
       INSERT VALUE #( %pid = ls_mapped_travel-%pid travelid = ls_mapped_travel-%tmp-TravelID ) INTO TABLE lt_travel_key.
     ENDLOOP.
-    "Notice that the read operation is done with %PID, TRAVELID, BOOKINGID
+    "Read operation is done with %PID, %TMP-TRAVELID, %TMP-BOOKINGID
     LOOP AT mapped-booking INTO DATA(ls_mapped_booking).
       INSERT VALUE #( %pid = ls_mapped_booking-%pid travelid = ls_mapped_booking-%tmp-TravelID bookingid = ls_mapped_booking-%tmp-BookingID ) INTO TABLE lt_booking_key.
     ENDLOOP.
@@ -196,10 +195,10 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
            RESULT DATA(lt_all_bookings).
 
 
-    "Create travel with bookings
+    "Create travel with bookings (case 1)
     LOOP AT lt_all_travels INTO DATA(ls_travel).
       DATA(lt_bookings) = lt_all_bookings.
-      DELETE lt_bookings     WHERE %pidparent <> ls_travel-%pid.
+      DELETE lt_bookings WHERE %pidparent <> ls_travel-%pid.
       _create_travel(
         EXPORTING
           is_travel      = ls_travel
@@ -216,6 +215,7 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
 
     "Assign pending booking id from preliminay identifiers. Take into account that this values
     "are assigned during interaction phase
+    "At this point, we will assign new bookings ids for existing travels (case 2)
     LOOP AT mapped-booking ASSIGNING FIELD-SYMBOL(<fs_booking>)
     WHERE bookingid IS INITIAL AND
           %tmp-TravelID IS NOT INITIAL AND
@@ -306,12 +306,13 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
     "Save to database
     CALL FUNCTION '/DMO/FLIGHT_TRAVEL_SAVE'.
 
-    "Map ids in mapping table
+    "Map final ids
     "Travel
     READ TABLE mapped-travel ASSIGNING FIELD-SYMBOL(<fs_mapped_travel>)
       WITH KEY id COMPONENTS %pid = is_travel-%pid.
     <fs_mapped_travel>-TravelID = ls_travel_out-travel_id.
 
+    "Bookings for this travel
     LOOP AT it_bookings ASSIGNING FIELD-SYMBOL(<fs_booking>)
       WHERE %pidparent = is_travel-%pid.
       "Map booking id
@@ -319,8 +320,6 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
         WITH KEY id COMPONENTS %pid = <fs_booking>-%pid.
       <fs_mapped_booking>-BookingId = <fs_booking>-BookingId.
       <fs_mapped_booking>-TravelID  = ls_travel_out-travel_id.
-
-
     ENDLOOP.
 
   ENDMETHOD.
@@ -406,9 +405,6 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
         it_booking  = lt_booking
         it_bookingx = lt_bookingx
       IMPORTING
-*       es_travel   =
-*       et_booking  =
-*       et_booking_supplement  =
         et_messages = et_messages.
 
   ENDMETHOD.
