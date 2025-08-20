@@ -27,8 +27,7 @@ as projection on ZI_Travel_U_CSN
     Memo,
     @Consumption.valueHelpDefinition: [{ entity: { name: '/DMO/I_Travel_Status_VH', element: 'TravelStatus' }}]
     @ObjectModel.text.element: ['StatusText']  
-    Status,
-      
+    Status,      
     _TravelStatus._Text.Text as StatusText : localized,
     LocalLastChangeDateTime,
     CreatedAt,
