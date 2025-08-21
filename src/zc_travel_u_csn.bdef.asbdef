@@ -1,8 +1,8 @@
 projection;
 strict ( 2 );
 use draft;
-
 define behavior for ZC_Travel_U_CSN alias Travel
+use etag
 {
   use create;
   use update;
@@ -15,11 +15,11 @@ define behavior for ZC_Travel_U_CSN alias Travel
   use action Prepare;
 
   use function GetDefaultsForBookings;
-
   use association _Booking { create; with draft; }
 }
 
 define behavior for ZC_Booking_U_CSN alias Booking
+use etag
 {
   use update;
   use delete;

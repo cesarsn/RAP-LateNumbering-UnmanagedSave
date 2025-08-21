@@ -63,6 +63,16 @@ annotate entity ZC_Travel_U_CSN
          selectionField: [{ position: 40 }],
          textArrangement:   #TEXT_ONLY }
   Status;
-
+  
+  @UI.hidden: true
+  CreatedAt;
+  @UI.hidden: true
+  CreatedBy;
+  @UI.hidden: true
+  LastChangedAt;
+  @UI.hidden: true
+  LastChangedBy;
+  @UI.hidden: true
+  LocalLastChangeDateTime;
     
 }
