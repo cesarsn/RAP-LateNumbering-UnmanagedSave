@@ -11,7 +11,7 @@ authorization master ( instance )
 etag master LocalLastChangeDateTime
 late numbering
 {
-  create ( authorization : global );
+  create;
   update;
   delete;
   field ( readonly ) TravelID;
