@@ -209,7 +209,7 @@ CLASS lsc_ZI_TRAVEL_U_CSN IMPLEMENTATION.
 
     ENDLOOP.
 
-    "Assign pending booking id from preliminay identifiers. Take into account that this values
+    "Assign pending booking id from preliminary identifiers. Take into account that this values
     "are assigned during interaction phase
     "At this point, we will assign new bookings ids for existing travels (case 2)
     LOOP AT mapped-booking ASSIGNING FIELD-SYMBOL(<fs_booking>)
